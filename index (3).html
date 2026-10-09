@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simulation Moléculaire 3D — 2APIC</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    background: #0f1622;
+    color: #e8eef6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: #1b2a41;
+    padding: 14px 22px;
+    border-bottom: 1px solid #2f5d8a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.3px; }
+  header span { font-size: 0.85rem; opacity: 0.75; }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 260px 1fr 300px;
+    gap: 12px;
+    padding: 12px;
+  }
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    #scene-wrap { height: 60vh; }
+  }
+
+  .panel {
+    background: #16202e;
+    border: 1px solid #26364b;
+    border-radius: 10px;
+    padding: 14px;
+    overflow-y: auto;
+  }
+  .panel h2 {
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #7fb6e8;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #26364b;
+    padding-bottom: 6px;
+  }
+  .mol-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: #1e2b3d;
+    color: #dbe7f4;
+    border: 1px solid #2c405a;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .mol-btn:hover { background: #27384f; }
+  .mol-btn.active {
+    background: #2f5d8a;
+    border-color: #7fb6e8;
+    font-weight: 600;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+    font-size: 0.88rem;
+  }
+  .dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 1px solid #00000055;
+    flex-shrink: 0;
+  }
+  .dot.H { background: #f5f5f5; }
+  .dot.O { background: #d63b3b; }
+  .dot.C { background: #2a2a2a; border-color: #888; }
+  .dot.N { background: #2f6fdc; }
+
+  #info h3 { font-size: 1.1rem; margin-bottom: 6px; color: #ffffff; }
+  #info .formula {
+    font-size: 1.3rem; font-weight: 700; color: #7fd0ff;
+    margin: 6px 0 10px;
+    letter-spacing: 1px;
+  }
+  #info p { font-size: 0.86rem; line-height: 1.45; margin-bottom: 6px; color: #c8d6e8; }
+  #info ul { list-style: none; font-size: 0.86rem; margin: 6px 0; }
+  #info li { padding: 3px 0; border-bottom: 1px dashed #26364b; }
+
+  #scene-wrap {
+    position: relative;
+    --scene-bg: #1b2a41;
+    background: var(--scene-bg);
+    border: 1px solid #26364b;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: background 0.35s;
+  }
+  #scene-wrap canvas { display: block; }
+
+  #toolbar {
+    position: absolute;
+    top: 10px; left: 10px; right: 10px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    z-index: 10;
+  }
+  .tool {
+    background: #1e2b3dcc;
+    color: #dbe7f4;
+    border: 1px solid #2c405a;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .tool:hover { background: #2f5d8a; }
+  .tool.on { background: #2f5d8a; border-color: #7fb6e8; }
+  .tool:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .tool.icon-only {
+    width: 40px; height: 40px;
+    padding: 0;
+    border-radius: 8px;
+  }
+  .tool.icon-only svg {
+    width: 20px; height: 20px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .tool.icon-only.on {
+    background: #2a6d8a;
+    border-color: #7fb6e8;
+    color: #bfeaff;
+  }
+
+  .bg-picker {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #1e2b3dcc;
+    border: 1px solid #2c405a;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 0.78rem;
+    color: #c8d6e8;
+    backdrop-filter: blur(4px);
+  }
+  .bg-swatch {
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.12s, transform 0.12s;
+  }
+  .bg-swatch:hover { transform: scale(1.1); }
+  .bg-swatch.active { border-color: #7fb6e8; }
+
+  #click-info {
+    position: absolute;
+    bottom: 12px; left: 12px; right: 12px;
+    background: #0d1520e0;
+    border: 1px solid #2c405a;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    color: #dbe7f4;
+    min-height: 34px;
+    backdrop-filter: blur(4px);
+  }
+  #click-info strong { color: #7fd0ff; }
+
+  #quiz { margin-top: 10px; }
+  #quiz .q { font-size: 0.88rem; margin-bottom: 8px; line-height: 1.4; }
+  #quiz .answers { display: flex; flex-direction: column; gap: 4px; }
+  #quiz button {
+    background: #1e2b3d;
+    color: #dbe7f4;
+    border: 1px solid #2c405a;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    text-align: left;
+  }
+  #quiz button:hover { background: #27384f; }
+  #quiz button.correct { background: #1f6b3a; border-color: #4dffa0; }
+  #quiz button.wrong { background: #6b1f1f; border-color: #ff8080; }
+  #quiz-feedback { font-size: 0.82rem; margin-top: 6px; min-height: 18px; }
+
+  footer {
+    text-align: center;
+    font-size: 0.75rem;
+    padding: 8px;
+    color: #6b7d92;
+    border-top: 1px solid #1b2635;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧪 Simulation Moléculaire 3D — 2APIC</h1>
+  <span>Modèles pédagogiques · Sphères atomiques uniquement</span>
+</header>
+
+<main>
+
+  <aside class="panel">
+    <h2>Molécules</h2>
+    <div id="mol-list"></div>
+
+    <h2 style="margin-top:16px;">Légende</h2>
+    <div class="legend-item"><span class="dot H"></span> Hydrogène (H)</div>
+    <div class="legend-item"><span class="dot O"></span> Oxygène (O)</div>
+    <div class="legend-item"><span class="dot C"></span> Carbone (C)</div>
+    <div class="legend-item"><span class="dot N"></span> Azote (N)</div>
+  </aside>
+
+  <section id="scene-wrap">
+    <div id="toolbar">
+      <button class="tool icon-only" id="btn-auto" title="Rotation automatique">
+        <svg viewBox="0 0 24 24">
+          <path d="M21 12a9 9 0 1 1-3-6.7"/>
+          <path d="M21 3v6h-6"/>
+        </svg>
+      </button>
+
+      <button class="tool icon-only" id="btn-labels" title="Afficher les symboles chimiques">
+        <svg viewBox="0 0 24 24">
+          <path d="M6 5v14M6 12h8M14 5v14"/>
+          <path d="M18 8v8M16 8h4"/>
+        </svg>
+      </button>
+
+      <button class="tool" id="btn-decompose">🧩 Décomposer</button>
+      <button class="tool" id="btn-reset">🎯 Vue initiale</button>
+
+      <div class="bg-picker" title="Couleur de fond de la zone 3D">
+        <span>Fond :</span>
+        <div class="bg-swatch active" data-bg="#1b2a41" style="background:#1b2a41" title="Bleu nuit"></div>
+        <div class="bg-swatch" data-bg="#2a2a2a" style="background:#2a2a2a" title="Anthracite"></div>
+        <div class="bg-swatch" data-bg="#3a2f4a" style="background:#3a2f4a" title="Violet sombre"></div>
+        <div class="bg-swatch" data-bg="#1a3a2e" style="background:#1a3a2e" title="Vert forêt"></div>
+        <div class="bg-swatch" data-bg="#4a3a2a" style="background:#4a3a2a" title="Brun"></div>
+        <div class="bg-swatch" data-bg="#d8dde4" style="background:#d8dde4" title="Gris clair"></div>
+        <div class="bg-swatch" data-bg="#f5f5f5" style="background:#f5f5f5" title="Blanc cassé"></div>
+      </div>
+    </div>
+    <div id="click-info">Cliquez sur une sphère pour identifier l'atome.</div>
+  </section>
+
+  <aside class="panel">
+    <h2>Fiche pédagogique</h2>
+    <div id="info"></div>
+
+    <h2 style="margin-top:16px;">Quiz</h2>
+    <div id="quiz"></div>
+  </aside>
+
+</main>
+
+<footer>
+  Application pédagogique — Les tailles et distances des sphères sont des choix graphiques, non des mesures scientifiques exactes.
+</footer>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   1. PARAMÈTRES GRAPHIQUES
+   ============================================================ */
+const RAYONS  = { H: 0.35, O: 0.55, N: 0.55, C: 0.60 };
+const COULEURS = { H: 0xf5f5f5, O: 0xd63b3b, C: 0x2a2a2a, N: 0x2f6fdc };
+const ORDRE_EL = ['H', 'O', 'C', 'N'];
+
+const ESPACEMENT_DECOMPOSE = 1.10;
+const ECART_GROUPES = 1.8;
+const DUREE_ANIM = 1.4;
+
+/* ------------------------------------------------------------
+   OMBRE — quasi invisible
+   ------------------------------------------------------------
+   L'ombre est un simple appui visuel sous la molécule. Elle
+   doit être très discrète pour ne JAMAIS être confondue avec
+   un atome.
+
+   - OMBRE_OPACITE_ASSEMBLE : 0.10 → ombre très légère (10 %)
+   - OMBRE_OPACITE_DECOMPOSE : 0.00 → disparition totale
+   ------------------------------------------------------------ */
+const OMBRE_OPACITE_ASSEMBLE = 0.10;
+const OMBRE_OPACITE_DECOMPOSE = 0.00;
+
+const OMBRE_Y = -1.55;
+const OMBRE_MARGE = 1.20;
+
+/* ============================================================
+   2. DONNÉES DES 7 MOLÉCULES
+   ============================================================ */
+const MOLECULES = {
+  H2O: {
+    nom: "Eau", formule: "H₂O",
+    description: "Deux atomes d'hydrogène et un atome d'oxygène formant un angle coudé.",
+    atomes: [
+      { el: 'O', pos: [ 0.00, 0.00, 0] },
+      { el: 'H', pos: [ 0.85, 0.45, 0] },
+      { el: 'H', pos: [-0.85, 0.45, 0] }
+    ]
+  },
+  H2: {
+    nom: "Dihydrogène", formule: "H₂",
+    description: "Deux atomes d'hydrogène en contact direct, alignés.",
+    atomes: [
+      { el: 'H', pos: [-0.35, 0, 0] },
+      { el: 'H', pos: [ 0.35, 0, 0] }
+    ]
+  },
+  O2: {
+    nom: "Dioxygène", formule: "O₂",
+    description: "Deux atomes d'oxygène en contact direct, alignés.",
+    atomes: [
+      { el: 'O', pos: [-0.55, 0, 0] },
+      { el: 'O', pos: [ 0.55, 0, 0] }
+    ]
+  },
+  C2H4: {
+    nom: "Éthène", formule: "C₂H₄",
+    description: "Deux atomes de carbone et quatre atomes d'hydrogène dans un plan globalement plat.",
+    atomes: [
+      { el: 'C', pos: [-0.60,  0.00, 0] },
+      { el: 'C', pos: [ 0.60,  0.00, 0] },
+      { el: 'H', pos: [-1.25,  0.70, 0] },
+      { el: 'H', pos: [-1.25, -0.70, 0] },
+      { el: 'H', pos: [ 1.25,  0.70, 0] },
+      { el: 'H', pos: [ 1.25, -0.70, 0] }
+    ]
+  },
+  N2: {
+    nom: "Diazote", formule: "N₂",
+    description: "Deux atomes d'azote en contact direct, alignés.",
+    atomes: [
+      { el: 'N', pos: [-0.55, 0, 0] },
+      { el: 'N', pos: [ 0.55, 0, 0] }
+    ]
+  },
+  CO2: {
+    nom: "Dioxyde de carbone", formule: "CO₂",
+    description: "Un atome de carbone central et deux atomes d'oxygène en configuration linéaire.",
+    atomes: [
+      { el: 'C', pos: [ 0.00, 0, 0] },
+      { el: 'O', pos: [-1.15, 0, 0] },
+      { el: 'O', pos: [ 1.15, 0, 0] }
+    ]
+  },
+  CO: {
+    nom: "Monoxyde de carbone", formule: "CO",
+    description: "Un atome de carbone et un atome d'oxygène en contact direct.",
+    atomes: [
+      { el: 'C', pos: [-0.60, 0, 0] },
+      { el: 'O', pos: [ 0.60, 0, 0] }
+    ]
+  }
+};
+
+/* ============================================================
+   3. SCÈNE THREE.JS
+   ============================================================ */
+const wrap = document.getElementById('scene-wrap');
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(
+  45,
+  wrap.clientWidth / wrap.clientHeight,
+  0.1,
+  1000
+);
+const CAM_POS_INIT = new THREE.Vector3(0, 1.1, 6.2);
+const CAM_TARGET   = new THREE.Vector3(0, 0.15, 0);
+camera.position.copy(CAM_POS_INIT);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+renderer.shadowMap.enabled = false;
+wrap.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 2;
+controls.maxDistance = 15;
+controls.target.copy(CAM_TARGET);
+controls.update();
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+keyLight.position.set(5, 8, 6);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x88aaff, 0.6);
+fillLight.position.set(-6, -3, -5);
+scene.add(fillLight);
+
+/* ============================================================
+   4. TEXTURE D'OMBRE — dégradé très doux
+   ------------------------------------------------------------
+   Le centre est noir mais l'opacité globale du matériau est
+   réglée à 0.10, ce qui rend l'ombre quasi invisible.
+   ============================================================ */
+function makeShadowTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createRadialGradient(
+    size / 2, size / 2, 0,
+    size / 2, size / 2, size / 2
+  );
+  grad.addColorStop(0.00, 'rgba(0,0,0,1)');
+  grad.addColorStop(0.55, 'rgba(0,0,0,0.55)');
+  grad.addColorStop(1.00, 'rgba(0,0,0,0)');
+
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+const shadowTexture = makeShadowTexture();
+
+/* ============================================================
+   5. CONSTRUCTION DES MOLÉCULES
+   ============================================================ */
+const moleculeRoots = {};
+const allSpheres = [];
+let labelsVisible = false;
+let currentKey = 'H2O';
+
+let exploded = false;
+let animating = false;
+let animProgress = 0;
+const animState = { active: false, from: 0, to: 0, t0: 0 };
+
+const sphereGeo = new THREE.SphereGeometry(1, 48, 48);
+
+function computeExplodedPositions(atomes) {
+  const parEl = {};
+  atomes.forEach((a, i) => {
+    if (!parEl[a.el]) parEl[a.el] = [];
+    parEl[a.el].push(i);
+  });
+
+  const typesPresents = ORDRE_EL.filter(el => parEl[el]);
+  const nbTypes = typesPresents.length;
+  const positions = new Array(atomes.length);
+  const rowGap = ESPACEMENT_DECOMPOSE * 1.05;
+
+  let groupesX = [];
+  if (nbTypes === 1)      groupesX = [0];
+  else if (nbTypes === 2) groupesX = [-ECART_GROUPES, ECART_GROUPES];
+  else if (nbTypes === 3) groupesX = [-ECART_GROUPES * 1.3, 0, ECART_GROUPES * 1.3];
+  else                    groupesX = [-ECART_GROUPES * 1.5, -ECART_GROUPES * 0.5,
+                                        ECART_GROUPES * 0.5,  ECART_GROUPES * 1.5];
+
+  typesPresents.forEach((el, g) => {
+    const indices = parEl[el];
+    const n = indices.length;
+    const xBase = groupesX[g];
+    indices.forEach((idx, k) => {
+      const y = (k - (n - 1) / 2) * rowGap;
+      positions[idx] = [xBase, y, 0];
+    });
+  });
+
+  return positions;
+}
+
+function makeLabelSprite(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  ctx.arc(64, 64, 50, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = 'bold 64px Arial';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 64, 68);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.55, 0.55, 0.55);
+  return sprite;
+}
+
+function buildMolecule(key) {
+  const data = MOLECULES[key];
+  const group = new THREE.Group();
+  group.visible = false;
+  group.userData = { key, spheres: [] };
+
+  const explodedPositions = computeExplodedPositions(data.atomes);
+
+  let minX = Infinity, maxX = -Infinity;
+  data.atomes.forEach(at => {
+    const r = RAYONS[at.el];
+    minX = Math.min(minX, at.pos[0] - r);
+    maxX = Math.max(maxX, at.pos[0] + r);
+  });
+  const largeur = (maxX - minX) * OMBRE_MARGE;
+
+  // ---- Ombre quasi invisible ----
+  const shadowMat = new THREE.MeshBasicMaterial({
+    map: shadowTexture,
+    transparent: true,
+    opacity: OMBRE_OPACITE_ASSEMBLE,   // 0.10 → très léger
+    depthWrite: false
+  });
+  const shadowGeo = new THREE.PlaneGeometry(largeur, largeur * 0.45);
+  const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+  shadowMesh.rotation.x = -Math.PI / 2;
+  shadowMesh.position.set(0, OMBRE_Y, 0);
+  shadowMesh.renderOrder = -1;
+  group.add(shadowMesh);
+  group.userData.shadowMesh = shadowMesh;
+
+  data.atomes.forEach((at, idx) => {
+    const r = RAYONS[at.el];
+    const mat = new THREE.MeshStandardMaterial({
+      color: COULEURS[at.el],
+      roughness: 0.35,
+      metalness: 0.05
+    });
+    const mesh = new THREE.Mesh(sphereGeo, mat);
+    mesh.scale.set(r, r, r);
+    mesh.position.set(at.pos[0], at.pos[1], at.pos[2]);
+
+    mesh.userData = {
+      key, el: at.el, idx,
+      posAssembled: at.pos.slice(),
+      posExploded:  explodedPositions[idx]
+    };
+
+    const outline = new THREE.Mesh(
+      sphereGeo,
+      new THREE.MeshBasicMaterial({
+        color: 0x000000, transparent: true, opacity: 0.30, wireframe: true
+      })
+    );
+    outline.scale.set(r * 1.01, r * 1.01, r * 1.01);
+    mesh.add(outline);
+
+    const label = makeLabelSprite(at.el);
+    label.position.set(0, r + 0.25, 0);
+    label.visible = false;
+    mesh.add(label);
+
+    group.add(mesh);
+    group.userData.spheres.push(mesh);
+    allSpheres.push(mesh);
+  });
+
+  scene.add(group);
+  moleculeRoots[key] = group;
+}
+Object.keys(MOLECULES).forEach(buildMolecule);
+
+/* ============================================================
+   6. AFFICHAGE D'UNE MOLÉCULE
+   ============================================================ */
+function showMolecule(key) {
+  Object.values(moleculeRoots).forEach(g => g.visible = false);
+
+  const g = moleculeRoots[key];
+  g.visible = true;
+  g.position.set(0, 0, 0);
+
+  exploded = false;
+  animProgress = 0;
+  animating = false;
+  animState.active = false;
+  g.userData.spheres.forEach(s => {
+    s.position.fromArray(s.userData.posAssembled);
+  });
+
+  g.userData.shadowMesh.material.opacity = OMBRE_OPACITE_ASSEMBLE;
+  g.userData.shadowMesh.visible = true;
+
+  currentKey = key;
+  updateInfoPanel(key);
+  updateActiveButton(key);
+  updateDecomposeButton();
+  document.getElementById('click-info').innerHTML =
+    `Molécule affichée : <strong>${MOLECULES[key].nom} (${MOLECULES[key].formule})</strong>`;
+}
+
+function updateActiveButton(key) {
+  document.querySelectorAll('.mol-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.key === key);
+  });
+}
+
+function updateInfoPanel(key) {
+  const m = MOLECULES[key];
+  const compteur = {};
+  m.atomes.forEach(a => compteur[a.el] = (compteur[a.el] || 0) + 1);
+  const nomsEl = { H: 'Hydrogène', O: 'Oxygène', C: 'Carbone', N: 'Azote' };
+
+  let html = `<h3>${m.nom}</h3>`;
+  html += `<div class="formula">${m.formule}</div>`;
+  html += `<p>${m.description}</p>`;
+  html += `<p><strong>Nombre total d'atomes :</strong> ${m.atomes.length}</p>`;
+  html += `<ul>`;
+  Object.keys(compteur).forEach(el => {
+    html += `<li>${nomsEl[el]} (${el}) : <strong>${compteur[el]}</strong></li>`;
+  });
+  html += `</ul>`;
+  document.getElementById('info').innerHTML = html;
+}
+
+/* ============================================================
+   7. LISTE DES MOLÉCULES
+   ============================================================ */
+const molList = document.getElementById('mol-list');
+Object.keys(MOLECULES).forEach(key => {
+  const btn = document.createElement('button');
+  btn.className = 'mol-btn';
+  btn.dataset.key = key;
+  btn.textContent = `${MOLECULES[key].nom} — ${MOLECULES[key].formule}`;
+  btn.addEventListener('click', () => showMolecule(key));
+  molList.appendChild(btn);
+});
+
+/* ============================================================
+   8. DÉCOMPOSITION ANIMÉE
+   ============================================================ */
+const btnDecompose = document.getElementById('btn-decompose');
+
+function startAnim(toExploded) {
+  if (animating) return;
+  animating = true;
+  animState.from = animProgress;
+  animState.to = toExploded ? 1 : 0;
+  animState.t0 = performance.now() / 1000;
+  animState.active = true;
+  exploded = toExploded;
+  updateDecomposeButton();
+}
+
+function updateAnim(now) {
+  if (!animState.active) return;
+  const t = (now - animState.t0) / DUREE_ANIM;
+  const k = Math.min(1, Math.max(0, t));
+  const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+  animProgress = animState.from + (animState.to - animState.from) * e;
+
+  const g = moleculeRoots[currentKey];
+  g.userData.spheres.forEach(s => {
+    const a = s.userData.posAssembled;
+    const b = s.userData.posExploded;
+    s.position.set(
+      a[0] + (b[0] - a[0]) * animProgress,
+      a[1] + (b[1] - a[1]) * animProgress,
+      a[2] + (b[2] - a[2]) * animProgress
+    );
+  });
+
+  const shadowMesh = g.userData.shadowMesh;
+  const op = OMBRE_OPACITE_ASSEMBLE * (1 - animProgress) +
+             OMBRE_OPACITE_DECOMPOSE * animProgress;
+  shadowMesh.material.opacity = op;
+  shadowMesh.visible = op > 0.005;
+
+  if (k >= 1) {
+    animState.active = false;
+    animating = false;
+    updateDecomposeButton();
+  }
+}
+
+function updateDecomposeButton() {
+  if (animating) {
+    btnDecompose.disabled = true;
+    btnDecompose.style.opacity = '0.6';
+    return;
+  }
+  btnDecompose.disabled = false;
+  btnDecompose.style.opacity = '1';
+  if (exploded) {
+    btnDecompose.textContent = '🧩 Reformer';
+    btnDecompose.classList.add('on');
+  } else {
+    btnDecompose.textContent = '🧩 Décomposer';
+    btnDecompose.classList.remove('on');
+  }
+}
+
+btnDecompose.addEventListener('click', () => startAnim(!exploded));
+
+/* ============================================================
+   9. BOUTON ROTATION
+   ============================================================ */
+let autoRotate = false;
+const btnAuto = document.getElementById('btn-auto');
+
+btnAuto.addEventListener('click', () => {
+  autoRotate = !autoRotate;
+  btnAuto.classList.toggle('on', autoRotate);
+  controls.autoRotate = autoRotate;
+  controls.autoRotateSpeed = 1.2;
+});
+
+/* ============================================================
+   10. BOUTON SYMBOLES
+   ============================================================ */
+const btnLabels = document.getElementById('btn-labels');
+
+btnLabels.addEventListener('click', () => {
+  labelsVisible = !labelsVisible;
+  btnLabels.classList.toggle('on', labelsVisible);
+  allSpheres.forEach(mesh => {
+    mesh.children.forEach(c => {
+      if (c.isSprite) c.visible = labelsVisible;
+    });
+  });
+});
+
+/* ============================================================
+   11. VUE INITIALE
+   ============================================================ */
+document.getElementById('btn-reset').addEventListener('click', () => {
+  camera.position.copy(CAM_POS_INIT);
+  controls.target.copy(CAM_TARGET);
+  controls.update();
+
+  autoRotate = false;
+  btnAuto.classList.remove('on');
+  controls.autoRotate = false;
+});
+
+/* ============================================================
+   12. SÉLECTEUR DE COULEUR DE FOND
+   ============================================================ */
+const swatches = document.querySelectorAll('.bg-swatch');
+const sceneWrap = document.getElementById('scene-wrap');
+
+swatches.forEach(sw => {
+  sw.addEventListener('click', () => {
+    const bg = sw.dataset.bg;
+    sceneWrap.style.setProperty('--scene-bg', bg);
+
+    swatches.forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+
+    const isLight = ['#d8dde4', '#f5f5f5'].includes(bg);
+    const info = document.getElementById('click-info');
+    info.style.background = isLight ? 'rgba(255,255,255,0.92)' : '#0d1520e0';
+    info.style.color      = isLight ? '#1a1f26' : '#dbe7f4';
+  });
+});
+
+/* ============================================================
+   13. CLIC SUR UNE SPHÈRE
+   ============================================================ */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+renderer.domElement.addEventListener('click', (event) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+
+  const visibles = allSpheres.filter(s => {
+    let p = s;
+    while (p.parent) p = p.parent;
+    return p.visible;
+  });
+
+  const hits = raycaster.intersectObjects(visibles, false);
+  const info = document.getElementById('click-info');
+
+  if (hits.length > 0) {
+    const mesh = hits[0].object;
+    const el = mesh.userData.el;
+    const nomsEl = { H: 'Hydrogène', O: 'Oxygène', C: 'Carbone', N: 'Azote' };
+    info.innerHTML = `Atome identifié : <strong>${nomsEl[el]} (${el})</strong> — rayon graphique : ${RAYONS[el]}`;
+  } else {
+    info.textContent = "Aucun atome à cet endroit. Cliquez sur une sphère.";
+  }
+});
+
+/* ============================================================
+   14. QUIZ
+   ============================================================ */
+const QUIZ = [
+  { q: "Combien d'atomes d'hydrogène contient la molécule d'eau H₂O ?",
+    answers: ["1", "2", "3"], correct: 1 },
+  { q: "Quelle est la couleur conventionnelle de l'atome d'oxygène ?",
+    answers: ["Bleu", "Rouge", "Blanc"], correct: 1 },
+  { q: "Combien d'atomes au total compose la molécule CO₂ ?",
+    answers: ["2", "3", "4"], correct: 1 },
+  { q: "Quelle molécule est constituée de deux atomes d'azote ?",
+    answers: ["O₂", "N₂", "H₂"], correct: 1 },
+  { q: "Dans la molécule C₂H₄, combien y a-t-il d'atomes de carbone ?",
+    answers: ["1", "2", "4"], correct: 1 }
+];
+
+let quizIndex = 0;
+const quizEl = document.getElementById('quiz');
+const feedbackEl = document.createElement('div');
+feedbackEl.id = 'quiz-feedback';
+
+function renderQuiz() {
+  quizEl.innerHTML = '';
+  if (quizIndex >= QUIZ.length) {
+    quizEl.innerHTML = `<div class="q">✅ Quiz terminé ! Rechargez la page pour recommencer.</div>`;
+    return;
+  }
+  const item = QUIZ[quizIndex];
+  const qDiv = document.createElement('div');
+  qDiv.className = 'q';
+  qDiv.textContent = `Q${quizIndex + 1}. ${item.q}`;
+  quizEl.appendChild(qDiv);
+
+  const ansDiv = document.createElement('div');
+  ansDiv.className = 'answers';
+  item.answers.forEach((a, i) => {
+    const b = document.createElement('button');
+    b.textContent = a;
+    b.addEventListener('click', () => {
+      ansDiv.querySelectorAll('button').forEach(x => x.disabled = true);
+      if (i === item.correct) {
+        b.classList.add('correct');
+        feedbackEl.textContent = "✅ Bonne réponse !";
+      } else {
+        b.classList.add('wrong');
+        ansDiv.querySelectorAll('button')[item.correct].classList.add('correct');
+        feedbackEl.textContent = "❌ Mauvaise réponse. La bonne réponse est surlignée en vert.";
+      }
+      setTimeout(() => { quizIndex++; renderQuiz(); }, 1400);
+    });
+    ansDiv.appendChild(b);
+  });
+  quizEl.appendChild(ansDiv);
+
+  feedbackEl.textContent = '';
+  quizEl.appendChild(feedbackEl);
+}
+renderQuiz();
+
+/* ============================================================
+   15. BOUCLE + RESIZE
+   ============================================================ */
+function animate(nowMs) {
+  requestAnimationFrame(animate);
+  const now = nowMs / 1000;
+  updateAnim(now);
+  controls.update();
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+
+window.addEventListener('resize', () => {
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+});
+
+/* ============================================================
+   16. INITIALISATION
+   ============================================================ */
+showMolecule('H2O');
+</script>
+</body>
+</html>
